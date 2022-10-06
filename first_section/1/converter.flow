@@ -1,0 +1,10 @@
+import ds/array;
+import string;
+
+export {
+	converter(a : [int]) -> [string];
+}
+
+converter(a : [int]) -> [string] {
+    map(a, \i -> i2s(i));
+}

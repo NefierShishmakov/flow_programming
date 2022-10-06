@@ -1,0 +1,48 @@
+import ds/array;
+import ds/tree;
+
+export {
+	inds (a : [int], m : int) -> [Pair<int, int>];
+    indsEasyVersion(array : [int], m : int) -> [Pair<int, int>];
+}
+
+// Мы создаём дерево, в котором каждая вершина является map<key, value>
+// key = элемент массива
+// value = массив индексов этого элемента в массиве
+// В итоге у нас получится бинарное дерево, так как по умолчанию оно бинарное.
+// Потом мы проходимся по каждому элементу в нашем исходном массиве и при помощи функции lookupTree 
+// ищем вершину, значение которой равно m - x
+// Мы получили массив индексов этого элемента. Теперь мы составляем массив пар, при помощи fold.
+// И делаем конкатенацию с исходным массивом.
+
+inds (arr : [int], m : int) -> [Pair<int, int>] {
+    tree = foldi(arr, makeTree(), \index, init, value -> {
+        ind_arr = lookupTree(init, value);
+        switch (ind_arr){
+            None(): setTree(init, value, [index]);
+            Some(y): setTree(init, value, concat(y, [index]));
+        }
+    });
+    foldi(arr, [], \index, acc, x -> {
+        ind = lookupTree(tree, m - x);
+        switch (ind){
+            None(): acc;
+            Some(y): concat(acc, fold(y, [], \tmp, value -> {
+                if (value != index) {
+                    concat(tmp, [Pair(value, index)]);
+                }
+                else {
+                    tmp;
+                }
+            })); 
+        }
+    });
+}
+
+indsEasyVersion(array : [int], m : int) -> [Pair<int, int>] {
+    resArray : [Pair<int, int>] = [];
+    foldi(array, resArray, \i,pairs,a_i -> 
+        foldi(array, pairs, \j, pairs2, a_j -> 
+            if ((i != j) && (a_i + a_j == m)) concat(pairs2,[Pair(i,j)]) else pairs2));
+     
+}

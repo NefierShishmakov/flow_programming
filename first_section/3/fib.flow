@@ -1,0 +1,72 @@
+import ds/array;
+import loop;
+
+export {
+	fibRecursion(n : int) -> [int];
+	fibTailRecursion(n : int) -> [int];
+	fibRefArray(n : int) -> [int];
+}
+
+
+fibRecursion(n : int) -> [int] {
+    if (n <= 0) {
+    	[]
+    }
+    else if (n == 1) {
+    	[0]
+    }
+    else if (n == 2) {
+        [0, 1]
+    }
+    else
+    {
+    	f: [int] = fibRecursion(n - 1);
+	concat(f, [f[n-3] + f[n-2]])
+    }
+}
+
+fibTailRecursionHelp(f : [int], curr : int, n : int) -> [int];
+
+fibTailRecursion(n : int) -> [int] {
+    if (n <= 0) {
+	[]
+    }
+    else if (n == 1) {
+	[0]
+    }
+    else {
+	fibTailRecursionHelp([0, 1], 2, n)
+    }
+}
+
+fibTailRecursionHelp(f : [int], curr : int, n : int) -> [int] {
+    if (curr == n) {
+	f
+    }
+    else {
+    	fibTailRecursionHelp(concat(f, [f[curr - 2] + f[curr - 1]]), curr + 1, n)
+    }
+}
+
+fibRefArrayHelp(f : ref [int], n : int) -> void;
+
+fibRefArray(n : int) -> [int] {
+  if (n <= 0) {
+  	[]
+  }
+  else if (n == 1) {
+	[0]
+  }
+  else {
+	f : ref [int] = ref [0, 1];
+	fibRefArrayHelp(f, n);
+	^f
+  }
+}
+
+fibRefArrayHelp(f : ref [int], n : int) -> void {
+    if (length(^f) != n) {
+	fibRefArrayHelp(f, n - 1);
+	refArrayPush(f, ^f[n - 3] + ^f[n - 2]);
+    }
+}

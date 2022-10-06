@@ -1,0 +1,8 @@
+import runtime;
+import converter;
+
+main() {
+    a : [int] = [1, 2, 3, 4, 5, 6, 7];
+    str_array = converter(a);
+    println(strGlue(str_array, ", "));
+}

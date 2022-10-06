@@ -1,0 +1,9 @@
+import runtime;
+import fib;
+
+main() {
+    println(fibRecursion(10));
+    println(fibTailRecursion(10));
+    println(fibRefArray(10));
+}
+

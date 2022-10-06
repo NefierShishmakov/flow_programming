@@ -1,0 +1,7 @@
+import runtime;
+import ds/array;
+
+main() {
+    int_array : [int] = [1, 2, 3, 4, 5, 6, 7, 8, 9];
+    println(fold(int_array, 0, \x,y -> x * y));
+}

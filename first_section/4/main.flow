@@ -1,0 +1,10 @@
+import runtime;
+import index;
+
+main() {
+    a : [int] = [1, 2, 3, 5, 3, 4, 7];
+    m = 6;
+
+    println(inds(a, m));
+    println(indsEasyVersion(a, m));
+}
