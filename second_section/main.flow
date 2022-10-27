@@ -226,7 +226,12 @@ printValue(name : string, value : Maybe<double>){
 
 main() {
     println("Start");
-    exp = getUrlParameterDef("expression", "((6+((3+4)*5))-7)");
+
+    // Во второй параметр функции getUrlParameterDef мы пишем наше выражение
+    // Важно: все операции должны быть в скобках иначе программа работать не будет.
+    // Уберите комментарии, как будете сдавать)))
+
+    exp = getUrlParameterDef("expression", "(((x^2) + (y^2)) + 0)");
 	println("");
 	println("Input string expression: " + exp + "\n");
 
@@ -243,7 +248,7 @@ main() {
     println(rpn);
     
     printValue("Calculated value: ", calculate(ast, variables));
-
+    
     println("Derivative: " + expressionToString(derivative(ast, "x")) + "\n");
 
     println("Same actions after simplifying ast" + "\n\n");
