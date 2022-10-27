@@ -1,0 +1,8 @@
+Компилировать лабы на flow:
+    flowc1 jar=1 filename.flow
+
+Запускать лабы по flow:
+    java -jar filename.jar
+
+filename - в буквальном смысле название файла
+
