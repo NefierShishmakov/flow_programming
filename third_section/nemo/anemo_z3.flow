@@ -1,0 +1,114 @@
+import ds/set;
+import ds/arrayutils;
+
+import nemo/anemo_ast;
+import nemo/formula_ast;
+import nemo/nemo_typecheck;
+
+export {
+
+avc2z3(annot : NmAnnoProg, fs : [FolFormula], timeout : string, err_inds : Set<int>) -> string {
+	typing = fold(annot.prog.decls, makeTree(), \acc, decl ->
+		setTree(acc, decl.var, decl.type)
+	);
+	(if (timeout != "") "(set-option :timeout " + timeout + ")\n" else "") + 
+	strGlue(map(annot.prog.decls, nmDecl2z3), "\n") + "\n" +
+	strGlue(map(tree2pairs(annot.forms), \pair -> {
+			name = pair.first;
+			def  = pair.second;
+			args = strGlue(map(def.args, \arg -> 
+				"(" + arg + " " + nmType2z3(lookupTreeDef(typing, arg, NmIntType())) + ")"
+			), " ");
+			"(define-fun " + name + "(" + args + ") Bool " + folForm2z3(def.body, typing) + ")\n"+
+		}), "\n"
+	) + "\n" + 
+	strGlue(map(tree2pairs(annot.funcs), \pair -> {
+			name = pair.first;
+			def  = pair.second;
+			type = folTerm2NmType(def.body, typing);
+			args = strGlue(map(def.args, \arg -> 
+				"(" + arg + " " + nmType2z3(lookupTreeDef(typing, arg, NmIntType())) + ")"
+			), " ");
+			"(define-fun " + name + "(" + args + ") " + nmType2z3(type) + " " + folTerm2z3(def.body) + ")\n"+
+		}), "\n"
+	) + "\n" + 
+	strGlue(mapi(fs, \i, f -> {
+			name = "form" + i2s(i);
+			"(push)\n" +
+			"(define-fun " + name + "() Bool " + folForm2z3(f, typing) + ")\n"+
+			"(assert (not " + name + "))\n" +
+			"(check-sat)\n" +
+			(if (containsSet(err_inds, i)) "(get-model)\n" else "") + 
+			"(pop)\n"
+		}), "\n"
+	)
+}
+
+}
+
+nmDecl2z3(decl : NmDecl) -> string {
+	"(declare-const " + decl.var + " " + nmType2z3(decl.type) + ")"
+}
+
+nmType2z3(type : NmType) -> string {
+	switch (type) {
+		NmIntType(): "Int";
+		NmArrType(a): "(Array Int " + nmType2z3(a) + ")";
+	}
+}
+
+folForm2z3(f : FolFormula, typing : Tree<string, NmType>) -> string {
+	var_type = \v -> eitherMap(lookupTree(typing, v.name), nmType2z3, "?");
+	pred2z3 = \pred -> {
+		if (pred == "==") "=" else pred;
+	}
+	switch (f) {
+		FolAnd(f1, f2):  "(and " + folForm2z3(f1, typing) + " " + folForm2z3(f2, typing) + ")";
+		FolOr(f1, f2):   "(or "  + folForm2z3(f1, typing) + " " + folForm2z3(f2, typing) + ")";
+		FolImpl(f1, f2): "(=> "  + folForm2z3(f1, typing) + " " + folForm2z3(f2, typing) + ")";
+		FolNot(f1):      "(not " + folForm2z3(f1, typing) + ")";
+		FolQuant(q, f1):
+			switch(q) {
+				FolForall(v): "(forall ((" + v.name + " " + var_type(v) + ")) " + folForm2z3(f1, typing) + ")";
+				FolExists(v): "(exists ((" + v.name + " " + var_type(v) + ")) " + folForm2z3(f1, typing) + ")";
+			}
+		FolPred(n, args):
+			if (args == []) pred2z3(n) else 
+			if (n == "!=")
+			"(not (= " + strGlue(map(args, \arg -> folTerm2z3(arg)), " ") + "))" else 
+			"(" + pred2z3(n) + " " + strGlue(map(args, \arg -> folTerm2z3(arg)), " ") + ")";
+		FolTrue(): "true";
+		FolFalse(): "false";
+	}
+}
+
+folTerm2z3(t : FolTerm) -> string {
+	op2z3 = \op -> {
+		if (op == "/") "div" else 
+		if (op == "%") "rem" else 
+		if (op == "app") "select" else
+		if (op == "upd") "store" else op;
+	}
+	switch (t) {
+		FolVar(n): n;
+		FolFunc(n, args): 
+			if (length(args) == 0) op2z3(n) else 
+			"(" + op2z3(n) + " " + strGlue(map(args, folTerm2z3), " ") + ")";
+	}
+}
+
+folTerm2NmType(t : FolTerm, typing : Tree<string, NmType>) -> NmType {
+	switch (t) {
+		FolVar(n): lookupTreeDef(typing, n, NmIntType());
+		FolFunc(n, args): {
+			if (n == "app") {
+				cast(folTerm2NmType(args[0], typing) : NmType -> NmArrType).type
+			} else 
+			if (n == "upd") {
+				folTerm2NmType(args[0], typing)
+			} else {
+				NmIntType()
+			}
+		}
+	}
+}

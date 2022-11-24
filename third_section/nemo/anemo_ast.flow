@@ -1,0 +1,131 @@
+import lingo/pegcode/driver;
+
+import nemo/nemo_ast;
+import nemo/formula_ast;
+
+export {
+
+FolFormulaDef(
+	args : [string],
+	body : FolFormula,
+);
+
+FolFunctionDef(
+	args : [string],
+	body : FolTerm,
+);
+
+NmAnnoProg(
+	prog : NmProg,
+	pred : FolFormula,
+	post : FolFormula,
+	invs : Tree<NmLoop, FolFormula>,
+	forms : Tree<string, FolFormulaDef>,
+	funcs : Tree<string, FolFunctionDef>,
+);
+
+nmStatWithInvs2s(stat : NmStat, invs : Tree<NmLoop, FolFormula>) -> string {
+	indentStr = \str -> strGlue(map(strSplit(str, "\n"), \s -> "\t" + s), "\n");
+	switch (stat) {
+		NmAssign(var, val): var + " := " + nmExp2s(val);
+		NmTest(c, l, r): "(" + nmExp2s(l) + " " + c + " " + nmExp2s(r) + ")";
+		NmSeq(ss): "{\n" + strGlue(map(ss, \s -> indentStr(nmStatWithInvs2s(s, invs))), ";\n") + "\n}";
+		NmChoice(ss): "{" + strGlue(map(ss, \s -> indentStr(nmStatWithInvs2s(s, invs))), "U\n") + "\n}";
+		NmLoop(body): {
+			switch (lookupTree(invs, stat)) {
+				Some(inv): "*" + " { " + folForm2s(inv) + " } " + nmStatWithInvs2s(body, invs);
+				None(): "*" + "<no inv>" + nmStatWithInvs2s(body, invs);
+			}
+		}
+		NmPrint(e): "print(" + nmExp2s(e) + ")";
+	}
+}
+
+nmAnnoProg2s(vp : NmAnnoProg) -> string {
+	strGlue(map(vp.prog.decls, nmDecl2s), "\n") + "\n" +
+	foldTree(vp.forms, "", \name, def, acc -> 
+		acc + "formula "+ name + "(" + strGlue(def.args, ", ") + ") " + folForm2nices(def.body, 32) + "\n"
+	) + "\n" +
+	foldTree(vp.funcs, "", \name, def, acc -> 
+		acc + "function "+ name + "(" + strGlue(def.args, ", ") + ") " + folTerm2nices(def.body) + "\n"
+	) + "\n" +
+	"{ " + folForm2s(vp.pred) + " }\n" +
+	nmStatWithInvs2s(vp.prog.body, vp.invs) + "\n"
+	"{ " + folForm2s(vp.post) + " }\n"
+}
+
+anemo_parser = compilePegGrammar("#include lingo/anemo.lingo");
+
+s2anm(str : string) -> NmAnnoProg {
+	neg_op = \op -> {
+		if (op == "!=") "==" else
+		if (op == "==") "!=" else
+		if (op == "<") ">=" else
+		if (op == ">") "<=" else
+		if (op == "<=") ">" else
+		if (op == ">=") "<" else "";
+	}
+	invs = ref makeTree();
+	form_defs = ref makeTree();
+	func_defs = ref makeTree();
+	parsic(anemo_parser, str, 
+		SemanticActions(
+			mergeTree(defaultPegActions.t,
+			pairs2tree([
+				Pair("createSeq", \s -> NmSeq(concat3([s[0]], [s[1]], s[2]))),
+				Pair("createChoice", \s -> NmChoice(concat3([s[0]], [s[1]], s[2]))),
+				Pair("createIfElse", \s -> 
+					NmChoice([
+						NmSeq([NmTest(s[0], s[1], s[2]), s[3]]),
+						NmSeq([NmTest(neg_op(s[0]), s[1], s[2]), s[4]])
+					])
+				),
+				Pair("createWhile", \s -> {
+					loop = NmLoop(NmSeq([NmTest(s[0], s[1], s[2]), s[3]]));
+					invs := setTree(^invs, loop, s[4]);
+					NmSeq([loop, NmTest(neg_op(s[0]), s[1], s[2])])
+				}),
+				Pair("createLoop", \s -> {
+					loop = NmLoop(s[0]);
+					invs := setTree(^invs, loop, s[1]);
+					loop
+				}),
+				Pair("createVeriProg", \s ->
+					NmAnnoProg(NmProg(s[0], s[1]), s[2], s[3], ^invs, ^form_defs, ^func_defs)
+				),
+				Pair("createPred", \s -> FolPred(s[0], [])),
+				Pair("createBinPred", \s -> FolPred(s[0], [s[1], s[2]])),
+				Pair("createBinTerm", \s -> FolFunc(s[0], [s[1], s[2]])),
+				Pair("createFolEqual", \s ->
+					FolAnd(FolImpl(s[0], s[1]),FolImpl(s[1], s[0]))
+				),
+				Pair("createDefForm", \s -> {
+					def = FolFormulaDef(s[1], s[2]);
+					form_defs := setTree(^form_defs, s[0], def);
+					def
+				}),
+				Pair("createDefFunc", \s -> {
+					def = FolFunctionDef(s[1], s[2]);
+					func_defs := setTree(^func_defs, s[0], def);
+					def
+				}),
+				Pair("createZeroTerms", \__ -> cast([] : [flow] -> flow)),
+				Pair("createOneTerm", \s -> cast([s[0]] : [flow] -> flow)),
+				Pair("createSomeTerms", \s -> cast(concat([s[0]], s[1]) : [flow] -> flow)),
+			]))
+		)
+	)
+}
+
+nmExp2term(ex : NmExp) -> FolTerm {
+	switch (ex) {
+		NmBinOp(op, l, r): FolFunc(op, [nmExp2term(l), nmExp2term(r)]);
+		NmUnOp(op, e):     FolFunc(op, [nmExp2term(e)]);
+		NmUpd(a, i, v):    FolFunc("upd", [nmExp2term(a), nmExp2term(i), nmExp2term(v)]);
+		NmApp(a, i):       FolFunc("app", [nmExp2term(a), nmExp2term(i)]);
+		NmVar(name):       FolVar(name);
+		NmInt(val):        FolFunc(i2s(val), []);
+	}
+}
+
+}

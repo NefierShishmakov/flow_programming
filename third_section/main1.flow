@@ -1,0 +1,31 @@
+import ds/tree; 
+import string; 
+import lingo/pegcode/driver; 
+import nemo/nemo_ast; 
+import nemo/nemo_typecheck; 
+ 
+main() { 
+        file = "testsNemo/test2.nm"; 
+        src = getFileContent(file); 
+//Преобразование в немо 
+        prog = s2nm(src); 
+        err_count = ref 0; 
+// Подсчет количества ошибок 
+        err = \msg -> { 
+            err_count := ^err_count + 1; 
+            println(msg) 
+        } 
+//Обработка ошибок 
+        typecheckNmProgram(prog, err); 
+        if (^err_count == 0) { 
+            println("nemo prog " + file + ":"); 
+            println(nmProg2s(prog)); 
+            println("prog"); 
+            println("\n"); 
+            println(prog); 
+        }else{ 
+            println("ERROR"); 
+        } 
+    quit(0); 
+}
+

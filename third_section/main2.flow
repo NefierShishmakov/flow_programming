@@ -1,0 +1,48 @@
+import ds/tree; 
+import string; 
+import lingo/pegcode/driver; 
+import nemo/nemo_ast; 
+import fs/filesystem; 
+import nemo/vnemo_run; 
+import nemo/nemo_transl; 
+import nemo/nemo_typecheck; 
+ 
+main() { 
+//Чтение файла 
+    file = "testsNemo/test1.nm"; 
+    src = getFileContent(file); 
+//Преобразование в немо 
+    prog = s2nm(src); 
+    err_count = ref 0;     
+// Подсчет количества ошибок 
+    err = \msg -> { 
+        err_count := ^err_count + 1; 
+        //println(msg) 
+    } 
+//Обработка ошибок 
+    typecheckNmProgram(prog, err); 
+    if (^err_count == 0) { 
+        println("nemo prog " + file + ":"); 
+        println(nmProg2s(prog)); 
+        println("prog"); 
+        println(prog); 
+    }else{ 
+        println("ERROR"); 
+    } 
+// Парсер кода в код вирт машины 
+    switch (nm2vnm(prog)) { 
+        Some(vprog):{ 
+            //Меняем расширение ".vnm" и записываем преобразованный код Немо 
+            fileD =  changeFileExt(file, ".vnm"); 
+            setFileContent(fileD, vnmProg2s(vprog)); 
+            //Распечатать содержимое, используя vnmProg2s 
+            println(vnmProg2s(vprog)); 
+            //Транслируем вирт машину 
+            println(s2vnm(getFileContent(fileD))); 
+            //Запускаем вирт машину 
+            runVnemo(vprog, NmState(makeTree())); 
+            } 
+        None(): { } 
+    }    
+    quit(0); 
+}

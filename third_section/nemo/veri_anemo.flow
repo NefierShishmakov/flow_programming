@@ -1,0 +1,66 @@
+import ds/set;
+import nemo/anemo_ast;
+
+export {
+
+generateVerificationConditions(annot : NmAnnoProg) -> [FolFormula] {
+	avc = generateAVC(annot.post, annot.prog.body, annot.invs);
+	concat(
+		[FolImpl(annot.pred, avc.annotCond)],
+		set2array(avc.verifCond)
+	)
+}
+
+}
+
+NemoAVC(
+	annotCond : FolFormula,
+	verifCond : Set<FolFormula>
+);
+
+generateNemoAVC(annot : NmAnnoProg) -> NemoAVC {
+	generateAVC(annot.post, annot.prog.body, annot.invs) 
+}
+
+generateAVC(psi : FolFormula, stat : NmStat, invs : Tree<NmLoop, FolFormula>) -> NemoAVC {
+	switch (stat) {
+		NmAssign(var, val):
+			NemoAVC(substituteFormula(psi, var, nmExp2term(val)), makeSet());
+		NmTest(c, l, r): 
+			NemoAVC(FolImpl(FolPred(c, [nmExp2term(l), nmExp2term(r)]), psi), makeSet());
+		NmSeq(ss): 
+			fold(reverseA(ss), NemoAVC(psi, makeSet()), \acc, s -> {
+				avc = generateAVC(acc.annotCond, s, invs);
+				NemoAVC(
+					avc.annotCond,
+					mergeSets(acc.verifCond, avc.verifCond)
+				)
+			});
+		NmChoice(ss):
+			fold(ss, NemoAVC(FolTrue(), makeSet()), \acc, s -> {
+				avc = generateAVC(psi, s, invs);
+				NemoAVC(
+					FolAnd(acc.annotCond, avc.annotCond),
+					mergeSets(acc.verifCond, avc.verifCond)
+				)
+			});
+		NmLoop(body): {
+			switch (lookupTree(invs, stat)) {
+				Some(inv): {
+					avc = generateAVC(inv, body, invs);
+					NemoAVC(inv, 
+						insertSet(
+							insertSet(avc.verifCond, FolImpl(inv, psi)),
+							FolImpl(inv, avc.annotCond)
+						)
+					);
+				}
+				None(): {
+					println("Error: loop " + nmStat2s(stat) + " is not annotated");
+					NemoAVC(FolFalse(), makeSet());
+				}
+			}
+		}
+		NmPrint(e): NemoAVC(psi, makeSet());
+	}
+}

@@ -1,0 +1,133 @@
+import ds/tree;
+import string;
+
+export {
+	FolFormula ::= FolAnd, FolOr, FolImpl, FolNot, FolQuant, FolAtomic;
+		FolAnd(form1 : FolFormula, form2 : FolFormula);
+		FolOr(form1 : FolFormula, form2 : FolFormula);
+		FolImpl(premise : FolFormula, conclusion : FolFormula);
+		FolNot(form : FolFormula);
+		FolQuant(quant : FolQuantifier, form : FolFormula);
+
+	FolAtomic ::= FolPred, FolTrue, FolFalse;
+		FolPred(name : string, args : [FolTerm]);
+		FolTrue();
+		FolFalse();
+
+	FolQuantifier ::= FolForall, FolExists;
+		FolForall(var : FolVar);
+		FolExists(var : FolVar);
+
+	FolTerm ::= FolVar, FolFunc;
+		FolVar(name : string);
+		FolFunc(name : string, args : [FolTerm]);
+
+folForm2s(f : FolFormula) -> string {
+	switch (f) {
+		FolAnd(f1, f2):  "(" + folForm2s(f1) + " & " + folForm2s(f2) + ")";
+		FolOr(f1, f2):   "(" + folForm2s(f1) + " V " + folForm2s(f2) + ")";
+		FolImpl(f1, f2): "(" + folForm2s(f1) + " -> " + folForm2s(f2) + ")";
+		FolNot(f1): "-. " + folForm2s(f1);
+		FolQuant(q, f1):
+			switch(q) {
+				FolForall(v): "A" + v.name + "." + folForm2s(f1);
+				FolExists(v): "E" + v.name + "." + folForm2s(f1);
+			}
+		FolPred(n, args):
+			if (args == []) n else {
+				n + "(" + strGlue(map(args, \arg -> folTerm2s(arg)), ", ") + ")";
+			}
+		FolTrue(): "T";
+		FolFalse(): "F";
+	}
+}
+
+folTerm2s(t : FolTerm) -> string {
+	switch (t) {
+		FolVar(n): n; 
+		FolFunc(n, args): n + "(" + strGlue(map(args, \arg -> folTerm2s(arg)), ", ") + ")";
+	}
+}
+
+folForm2nices(f : FolFormula, max_len : int) -> string {
+	indent = \str -> strGlue(map(strSplit(str, "\n"), \s -> "\t" + s), "\n");
+	switch (f) {
+		FolAnd(f1, f2): {
+			sf1 = folForm2nices(f1, max_len);
+			sf2 = folForm2nices(f2, max_len);
+			s0 = "(" + sf1 + " & " + sf2 + ")";
+			if (strlen(s0) <= max_len) s0 else {
+				"(\n" + indent(sf1) + " &\n" + indent(sf2) + "\n)"
+			}
+		}
+		FolOr(f1, f2): {
+			sf1 = folForm2nices(f1, max_len);
+			sf2 = folForm2nices(f2, max_len);
+			s0 = "(" + sf1 + " V " + sf2 + ")";
+			if (strlen(s0) <= max_len) s0 else {
+				"(\n" + indent(sf1) + " V\n" + indent(sf2) + "\n)"
+			}
+		}
+		FolImpl(f1, f2): {
+			sf1 = folForm2nices(f1, max_len);
+			sf2 = folForm2nices(f2, max_len);
+			s0 = "(" + sf1 + " -> " + sf2 + ")";
+			if (strlen(s0) <= max_len) s0 else {
+				"(\n" + indent(sf1) + " ->\n" + indent(sf2) + "\n)"
+			}
+		}
+		FolNot(f1): "-. " + folForm2nices(f1, max_len);
+		FolQuant(q, f1):
+			switch(q) {
+				FolForall(v): "A" + v.name + "." + folForm2nices(f1, max_len);
+				FolExists(v): "E" + v.name + "." + folForm2nices(f1, max_len);
+			}
+		FolPred(n, args):
+			if (args == []) n else
+			if (length(args) == 2 && contains(["<", ">", "<=", ">=", "==", "!="], n)) {
+				"(" + folTerm2nices(args[0]) + " " + n + " " + folTerm2nices(args[1]) + ")";
+			} else {
+				n + "(" + strGlue(map(args, \arg -> folTerm2nices(arg)), ", ") + ")";
+			}
+		FolTrue(): "T";
+		FolFalse(): "F";
+	}
+}
+
+folTerm2nices(t : FolTerm) -> string {
+	switch (t) {
+		FolVar(n): n; 
+		FolFunc(n, args): {
+			if (length(args) == 0) n else
+			if (length(args) == 1 && n == "-") {
+				n + folTerm2nices(args[0])
+			} else if (length(args) == 2 && contains(["+", "-", "*", "/", "%"], n)) {
+				"(" + folTerm2nices(args[0]) + " " + n + " " + folTerm2nices(args[1]) + ")"  
+			} else {
+				n + "(" + strGlue(map(args, \arg -> folTerm2nices(arg)), ", ") + ")";
+			}
+		}
+	}
+}
+
+substituteFormula(f : FolFormula, v : string, t : FolTerm) -> FolFormula {
+	switch (f) {
+		FolAnd(f1, f2):  FolAnd(substituteFormula(f1, v, t), substituteFormula(f2, v, t));
+		FolOr(f1, f2):   FolOr(substituteFormula(f1, v, t), substituteFormula(f2, v, t));
+		FolImpl(f1, f2): FolImpl(substituteFormula(f1, v, t), substituteFormula(f2, v, t));
+		FolNot(f1):      FolNot(substituteFormula(f1, v, t));
+		FolQuant(q, f1): FolQuant(q, substituteFormula(f1, v, t)); // TODO: implement correctly
+		FolPred(n, args): FolPred(n, map(args, \a -> substituteTerm(a, v, t)));
+		FolTrue():  f;
+		FolFalse(): f;
+	}
+}
+
+substituteTerm(f : FolTerm, v : string, t : FolTerm) -> FolTerm {
+	switch (f) {
+		FolVar(n): if (n == v) t else f;
+		FolFunc(n, args): FolFunc(n, map(args, \a -> substituteTerm(a, v, t)));
+	}
+}
+
+}
